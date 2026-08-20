@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# photo originals: 19 MB of source the site never serves. Only the derived
+# assets in public/images/ are tracked — keep these backed up outside the repo.
+/img

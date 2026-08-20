@@ -24,7 +24,7 @@ npx serve out -l 4173  # check trailing-slash routing against flat files
 
 ## Photos
 
-Drop originals in `img/`, then:
+Drop originals in `img/` (gitignored — the repo keeps only the derived assets), then:
 
 ```bash
 ./scripts/prepare-images.sh     # img/ -> public/images/ (resize + WebP)

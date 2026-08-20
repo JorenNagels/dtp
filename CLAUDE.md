@@ -59,10 +59,11 @@ numbers follow automatically; if you hardcode one it will silently rot.
 
 ## Images
 
-Originals live in `img/` and are committed, so the pipeline is always reproducible. Run
-`./scripts/prepare-images.sh` after adding or replacing any of them; it resizes to 700px tall
-(1000px wide for the founders photo), encodes WebP q80, and writes `public/images/`. That took
-19 MB of source down to ~870 KB.
+Originals live in `img/`, which is **gitignored** — 19 MB of source the site never serves, so
+it stays out of every clone. Only the derived `public/images/` is tracked, which means the repo
+is not a backup: keep the originals somewhere else too. Run `./scripts/prepare-images.sh` after
+adding or replacing any of them; it resizes to 700px tall (1000px wide for the founders photo),
+encodes WebP q80, and writes `public/images/`. That took 19 MB of source down to ~870 KB.
 
 `sharp` is fetched by `npx` inside the script and is deliberately **not** a dependency — see
 the note at the top of the file. Photos are full colour; they're the only colour on the site.

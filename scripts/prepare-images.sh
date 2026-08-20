@@ -12,7 +12,7 @@
 #
 # Photos stay in full colour — they are the only colour on an otherwise
 # monochrome site, which is what makes them read as documentary rather than
-# decoration. Originals stay in img/, so this is always reproducible.
+# decoration. Originals stay in img/, which is gitignored — back them up yourself.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
