@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #0a0a0a;
+  color: #ececec;
+  font-family: var(--font-dm-sans), sans-serif;
+  font-weight: 300;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: #ececec;
+  color: #0a0a0a;
+}
+
+:focus-visible {
+  outline: 2px solid #ececec;
+  outline-offset: 3px;
+}
+
+/*
+ * Scroll reveal, gated on `.js` (set by an inline script in the document head).
+ * Without JavaScript the `.fade-up` rule never applies, so content stays
+ * visible instead of being stranded at opacity 0.
+ */
+.js .fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+}
+.js .fade-up.visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .js .fade-up {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .animate-scroll-brands {
+    animation: none;
+  }
+}
+
+.carousel-mask {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%);
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Hero backdrop. No photography exists for this brand, so the depth comes from
+ * a hairline grid plus a soft vignette rather than an image.
+ */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(236, 236, 236, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236, 236, 236, 0.5) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.hero-vignette {
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 42%,
+    rgba(236, 236, 236, 0.07) 0%,
+    transparent 70%
+  );
+}

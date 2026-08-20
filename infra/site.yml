@@ -1,0 +1,341 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Static hosting for dreamteamproductions.co.uk — private S3 origin behind
+  CloudFront with Origin Access Control, plus the GitHub Actions deploy role.
+
+  Deploy in us-east-1. The bucket could live closer to the UK, but a stack is
+  single-region and the CloudFront certificate must be in us-east-1; with edge
+  caching in front, origin region only affects cache misses.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: dreamteamproductions.co.uk
+    Description: Apex domain. `www.` is added as a second alias.
+
+  CertificateArn:
+    Type: String
+    Description: >
+      ACM certificate ARN from the certificate stack. Must be issued in
+      us-east-1 and cover both the apex and the www alias.
+    AllowedPattern: '^arn:aws:acm:us-east-1:\d{12}:certificate/.+$'
+    ConstraintDescription: Must be an issued ACM certificate ARN in us-east-1.
+
+  GitHubRepo:
+    Type: String
+    Default: JorenNagels/dtp
+    Description: owner/repo allowed to assume the deploy role.
+    AllowedPattern: '^[\w.-]+/[\w.-]+$'
+
+  GitHubRef:
+    Type: String
+    Default: refs/heads/main
+    Description: >
+      Git ref allowed to deploy. Narrow by design — widen to
+      `refs/tags/*` if you move to tag-triggered releases.
+
+  CreateOidcProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Set to false if this account already has the GitHub Actions OIDC
+      provider — an account may only have one per issuer URL.
+
+Conditions:
+  MakeOidcProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  # --- origin ---------------------------------------------------------------
+
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    # Keep the bucket if the stack is torn down; it is trivially re-populated,
+    # but an accidental delete would also drop the version history.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-${AWS::AccountId}'
+      # No website hosting: this is a REST origin reached only through
+      # CloudFront via OAC, so the bucket stays fully private.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: dreamteamproductions
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                # Scopes access to this distribution alone, not to CloudFront
+                # as a service — without this any account's distribution could
+                # read the bucket.
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt SiteBucket.Arn
+              - !Sub '${SiteBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # --- edge behaviour -------------------------------------------------------
+
+  IndexRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub '${AWS::StackName}-index-rewrite'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: >
+          Resolves directory-style URLs against a REST S3 origin, which — unlike
+          the legacy S3 website endpoint — does not serve index documents.
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+
+          // '/work/' -> '/work/index.html', matching Next's trailingSlash output.
+          if (uri.endsWith('/')) {
+            request.uri = uri + 'index.html';
+            return request;
+          }
+
+          // '/work' -> 301 '/work/'. Redirecting rather than rewriting keeps a
+          // single canonical URL per page.
+          if (uri.indexOf('.') === -1) {
+            var qs = Object.keys(request.querystring)
+              .map(function (key) {
+                var entry = request.querystring[key];
+                return entry.value ? key + '=' + entry.value : key;
+              })
+              .join('&');
+
+            return {
+              statusCode: 301,
+              statusDescription: 'Moved Permanently',
+              headers: {
+                location: { value: uri + '/' + (qs ? '?' + qs : '') },
+              },
+            };
+          }
+
+          return request;
+        }
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub '${AWS::StackName}-security-headers'
+        SecurityHeadersConfig:
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          StrictTransportSecurity:
+            # Deliberately without includeSubDomains: the `elliot.` subdomain is
+            # served by GitHub Pages and shouldn't be bound by this site's HSTS.
+            AccessControlMaxAgeSec: 63072000
+            Override: true
+          XSSProtection:
+            Protection: true
+            ModeBlock: true
+            Override: true
+          ContentSecurityPolicy:
+            # Everything is same-origin — fonts are self-hosted by next/font.
+            # 'unsafe-inline' on script-src is required by Next's static export
+            # (hydration payload and the no-JS flag are inline, and nonces need
+            # a server to generate them).
+            ContentSecurityPolicy: >-
+              default-src 'self'; script-src 'self' 'unsafe-inline'; style-src
+              'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';
+              connect-src 'self'; base-uri 'self'; form-action 'self';
+              frame-ancestors 'none'; object-src 'none'
+            Override: true
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'Static site — ${DomainName}'
+        Aliases:
+          - !Ref DomainName
+          - !Sub 'www.${DomainName}'
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: s3-origin
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            # Required for OAC: an empty OriginAccessIdentity signals that the
+            # legacy OAI path is not in use.
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed-CachingOptimized — honours the Cache-Control headers set by
+          # the deploy workflow's two-pass sync.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt IndexRewriteFunction.FunctionMetadata.FunctionARN
+        CustomErrorResponses:
+          # A private origin returns 403 for missing keys, not 404.
+          - ErrorCode: 403
+            ResponseCode: 404
+            ResponsePagePath: /404.html
+            ErrorCachingMinTTL: 60
+          - ErrorCode: 404
+            ResponseCode: 404
+            ResponsePagePath: /404.html
+            ErrorCachingMinTTL: 60
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+      Tags:
+        - Key: Project
+          Value: dreamteamproductions
+
+  # --- deploy identity ------------------------------------------------------
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # IAM validates GitHub's certificate chain against its own trust store,
+      # so the thumbprint is no longer load-bearing; this is the documented
+      # placeholder value.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by GitHub Actions to publish the built site.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              # !Ref on an OIDCProvider yields its ARN. Going through the
+              # resource (rather than composing the ARN) gives CloudFormation
+              # the dependency it needs to create the provider first; the
+              # literal is the fallback when the provider already exists.
+              Federated: !If
+                - MakeOidcProvider
+                - !Ref GitHubOidcProvider
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Pinned to one repo and one ref — a fork or another branch in
+                # the same repo cannot assume this role.
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:ref:${GitHubRef}'
+      Policies:
+        - PolicyName: publish-site
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SyncObjects
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObject
+                Resource: !Sub '${SiteBucket.Arn}/*'
+              - Sid: ListForSyncDiff
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !GetAtt SiteBucket.Arn
+              - Sid: InvalidateEdgeCache
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+
+Outputs:
+  BucketName:
+    Description: Set as the AWS_S3_BUCKET repository variable.
+    Value: !Ref SiteBucket
+
+  DistributionId:
+    Description: Set as the AWS_CLOUDFRONT_DISTRIBUTION_ID repository variable.
+    Value: !Ref Distribution
+
+  DistributionDomain:
+    Description: Verify the site here before changing any DNS.
+    Value: !GetAtt Distribution.DomainName
+
+  DeployRoleArn:
+    Description: Set as the AWS_DEPLOY_ROLE_ARN repository variable.
+    Value: !GetAtt DeployRole.Arn
+
+  ApexDnsTarget:
+    Description: >
+      Point the apex here with an ANAME/ALIAS record (or a Route 53 A-ALIAS).
+      A plain CNAME is not valid at a zone apex.
+    Value: !GetAtt Distribution.DomainName

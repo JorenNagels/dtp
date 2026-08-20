@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ACM certificate for dreamteamproductions.co.uk. Deployed separately from the
+  site stack because DNS validation blocks stack creation until the validation
+  CNAMEs exist at the registrar — and those records can only be read once the
+  resource has been created. Keeping it apart means the site stack stays fast
+  and independently updatable.
+
+  MUST be deployed in us-east-1: CloudFront only accepts certificates there.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: dreamteamproductions.co.uk
+    Description: Apex domain for the site.
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub 'www.${DomainName}'
+      ValidationMethod: DNS
+      Tags:
+        - Key: Project
+          Value: dreamteamproductions
+
+Outputs:
+  CertificateArn:
+    Description: Pass this to the site stack as its CertificateArn parameter.
+    Value: !Ref Certificate
+    Export:
+      Name: !Sub '${AWS::StackName}-CertificateArn'

@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# No long-lived AWS keys: the job exchanges its GitHub OIDC token for the
+# deploy role provisioned by infra/site.yml.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build static export
+        run: npm run build
+
+      - name: Fail if the export looks wrong
+        run: |
+          set -euo pipefail
+          for f in out/index.html out/work/index.html out/404.html out/sitemap.xml out/robots.txt; do
+            test -s "$f" || { echo "::error::missing or empty: $f"; exit 1; }
+          done
+          # A de-indexed deploy is the failure mode most likely to go unnoticed.
+          if grep -qi 'noindex' out/index.html; then
+            echo "::error::out/index.html carries a noindex directive"
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Two passes so fingerprinted assets can be cached for a year while HTML
+      # is always revalidated. Immutable assets go first: any new HTML that
+      # references them then never points at something not yet uploaded.
+      - name: Upload immutable assets
+        run: |
+          aws s3 sync out/ "s3://${{ vars.AWS_S3_BUCKET }}" \
+            --no-progress \
+            --cache-control 'public,max-age=31536000,immutable' \
+            --exclude '*.html' \
+            --exclude '*.txt' \
+            --exclude 'sitemap.xml' \
+            --exclude 'robots.txt'
+
+      - name: Upload documents
+        run: |
+          aws s3 sync out/ "s3://${{ vars.AWS_S3_BUCKET }}" \
+            --no-progress \
+            --delete \
+            --cache-control 'public,max-age=0,must-revalidate' \
+            --exclude '*' \
+            --include '*.html' \
+            --include '*.txt' \
+            --include 'sitemap.xml' \
+            --include 'robots.txt'
+
+      # --delete is scoped to the document pass by its filters, which is the
+      # behaviour we want: a page removed from the build is removed from the
+      # bucket, while superseded fingerprinted assets are left in place so
+      # in-flight page loads don't break mid-navigation. They cost fractions of
+      # a cent and are pruned by hand if the bucket ever needs it.
+      - name: Invalidate edge cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths '/*' \
+            --no-cli-pager \
+            --query 'Invalidation.Id' --output text
