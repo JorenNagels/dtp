@@ -71,9 +71,13 @@ numbers follow automatically; if you hardcode one it will silently rot.
 ## Progressive enhancement — don't regress this
 
 `.fade-up` starts at `opacity: 0`, so a scroll-reveal that depends on JS would hide the whole
-page from anyone without it. The rule is scoped to `.js .fade-up`, and an inline script in
-`layout.tsx` adds `.js` to `<html>` before first paint. **If you touch either, verify with
-JavaScript disabled** — the sibling site has this bug; this one shouldn't.
+page from anyone without it. The rule lives inside `@media (scripting: enabled)` in
+`globals.css`, so the hidden state only applies where the observer that clears it can run.
+
+Don't swap that media query for a class set by an inline script — an earlier version did
+exactly that and it caused a React hydration mismatch on `<html>` (the dev overlay showed
+"1 Issue" on every page load). **If you touch this, verify three things:** no console errors
+with JS on, every section reveals on scroll, and every section is visible with JS off.
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \

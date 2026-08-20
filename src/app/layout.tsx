@@ -54,16 +54,6 @@ const organisation = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-GB" className={`${bebas.variable} ${dmSans.variable}`}>
-      <head>
-        {/*
-          Marks the document as script-capable before first paint, which is what
-          `.js .fade-up` in globals.css keys off. Without this the scroll-reveal
-          would hide every section from anyone without JavaScript.
-        */}
-        <script
-          dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }}
-        />
-      </head>
       <body>
         {children}
         <script

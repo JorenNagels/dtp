@@ -26,27 +26,33 @@ body {
 }
 
 /*
- * Scroll reveal, gated on `.js` (set by an inline script in the document head).
- * Without JavaScript the `.fade-up` rule never applies, so content stays
- * visible instead of being stranded at opacity 0.
+ * Scroll reveal. Gated behind `scripting: enabled` so the hidden state is only
+ * ever applied where the observer that clears it can actually run — without
+ * JavaScript, content stays visible rather than stranded at opacity 0.
+ *
+ * Deliberately a media query and not a class set by an inline script: touching
+ * <html> before React hydrates causes an attribute mismatch. A browser too old
+ * to know this query simply skips the rule and shows everything immediately.
  */
-.js .fade-up {
-  opacity: 0;
-  transform: translateY(24px);
-  transition:
-    opacity 0.7s ease,
-    transform 0.7s ease;
-}
-.js .fade-up.visible {
-  opacity: 1;
-  transform: none;
+@media (scripting: enabled) {
+  .fade-up {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s ease;
+  }
+  .fade-up.visible {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .js .fade-up {
+  .fade-up {
     opacity: 1;
     transform: none;
     transition: none;
