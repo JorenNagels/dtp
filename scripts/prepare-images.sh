@@ -45,12 +45,18 @@ encode "$tmp/founders-crop.webp" "$OUT/founders.webp"  1000 9999
 encode "$tmp/founders-crop.webp" "$OUT/founders-620.webp" 620 9999
 
 # --- gallery --------------------------------------------------------------
-# Curated from the 17 originals. Dropped as redundant: image.webp (a looser
-# framing of image (1)), and two of the three PXL mixer frames.
+# Every original in img/ is used: the 16 tiles below, plus image (13) which is
+# the founders shot above. Some are close neighbours — image.webp and image (1)
+# are two framings of the same camera position, and the three PXL frames come
+# from one mixer session — so keep them apart in photos.ts, which controls the
+# order the filmstrip renders them in.
 gallery=(
   "image (1).webp:camera-monitor"
+  "image.webp:camera-position"
   "image (6).webp:boxnation-gallery"
   "PXL_20251019_002950731.PORTRAIT.webp:mixer-wide"
+  "PXL_20251019_002832357.PORTRAIT.webp:mixer-multiviewer"
+  "PXL_20251019_003108911.PORTRAIT.webp:mixer-operator"
   "image (4).webp:gallery-crew"
   "image (2).webp:gallery-arena"
   "image (10).webp:vision-mixer"

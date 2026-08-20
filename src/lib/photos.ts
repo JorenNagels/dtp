@@ -9,6 +9,12 @@
  * Alt text describes the craft on show. Events are only named where the branding
  * is legible in frame and matches a real credit in `credits.ts` — don't attach a
  * client's name to a photo that can't be tied to them.
+ *
+ * Every original in `img/` is represented: the 16 tiles below plus the founders
+ * shot. A few are near neighbours — two framings of the same camera position,
+ * three frames from one mixer session — so the order here interleaves them.
+ * `Gallery.tsx` splits this list by index into two rows, so entries two apart
+ * land side by side; keep the lookalikes further apart than that.
  */
 export type Photo = { src: string; w: number; h: number; alt: string };
 
@@ -58,6 +64,18 @@ export const photos: Photo[] = [
     alt: 'Cutting a live show on the vision mixer',
   },
   {
+    src: '/images/work/mixer-multiviewer.webp',
+    w: 930,
+    h: 700,
+    alt: 'Player cameras and game feeds on the multiviewer beside the panel',
+  },
+  {
+    src: '/images/work/camera-position.webp',
+    w: 527,
+    h: 700,
+    alt: 'Camera position and crew desk on the arena floor — Pivotal at York Hall',
+  },
+  {
     src: '/images/work/boxnation-desk.webp',
     w: 640,
     h: 640,
@@ -68,6 +86,12 @@ export const photos: Photo[] = [
     w: 1024,
     h: 683,
     alt: 'Camera operator shooting a live segment',
+  },
+  {
+    src: '/images/work/mixer-operator.webp',
+    w: 930,
+    h: 700,
+    alt: 'Cutting a competitive gaming broadcast, talkback headset on',
   },
   {
     src: '/images/work/stage-lineup.webp',
