@@ -52,15 +52,15 @@ export type TeamMember = {
 
 export const team: TeamMember[] = [
   {
-    name: 'Chris Sunderland',
-    role: 'Co-founder',
-    bio: '175+ events for Braincup Media, including for Queensberry Promotions, Riyadh Season, DAZN and Guild Esports. Runs the fight-week output — every rung from York Hall to Kingdom Arena.',
-  },
-  {
     name: 'Elliot Barham',
     role: 'Co-founder',
     bio: 'Producer and project manager on the esports side; gallery operator on the fight side — replay, vision mixing and stage tech. Nine editions of PAX Arena for ReedPop, plus Red Bull Kumite in Rome and EGX in London. Also works as an event host and presenter.',
     link: { label: 'Hosting portfolio', href: site.talentUrl },
+  },
+  {
+    name: 'Chris Sunderland',
+    role: 'Co-founder',
+    bio: '175+ events for Braincup Media, including for Queensberry Promotions, Riyadh Season, DAZN and Guild Esports. Runs the fight-week output — every rung from York Hall to Kingdom Arena.',
   },
 ];
 

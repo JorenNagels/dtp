@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Bebas_Neue, DM_Sans } from 'next/font/google';
+import Intro from '@/components/Intro';
 import { site } from '@/lib/data';
 import './globals.css';
 
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB" className={`${bebas.variable} ${dmSans.variable}`}>
       <body>
+        <Intro />
         {children}
         <script
           type="application/ld+json"

@@ -5,6 +5,7 @@ import { site } from '@/lib/data';
 const links = [
   { href: '/#capabilities', label: 'Capabilities' },
   { href: '/#work', label: 'Work' },
+  { href: '/#gallery', label: 'Gallery' },
   { href: '/#clients', label: 'Clients' },
   { href: '/#team', label: 'Team' },
   { href: '/#contact', label: 'Contact' },

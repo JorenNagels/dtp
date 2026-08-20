@@ -22,6 +22,21 @@ npm run build          # static export into out/
 npx serve out -l 4173  # check trailing-slash routing against flat files
 ```
 
+## Photos
+
+Drop originals in `img/`, then:
+
+```bash
+./scripts/prepare-images.sh     # img/ -> public/images/ (resize + WebP)
+```
+
+Then update `src/lib/photos.ts` — the manifest that lists each gallery photo with its real
+pixel dimensions and its alt text. The dimensions matter: they reserve each tile's space so the
+page doesn't shift as images load.
+
+`sharp` is pulled in by `npx` on demand rather than being a project dependency, so nothing
+about the build depends on it.
+
 ## Editing content
 
 Everything lives in two files.
