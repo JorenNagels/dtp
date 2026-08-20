@@ -1,0 +1,88 @@
+name: Preview
+
+# Temporary validation host on GitHub Pages, at
+# https://jorennagels.github.io/dtp/ — a stand-in until the S3/CloudFront stack
+# is deployed and the apex domain is live.
+#
+# Manual trigger only, deliberately: it must never race the S3 deploy on `main`,
+# and a preview that redeploys on every push is a preview nobody has validated.
+#
+# This whole file is disposable. When validation is done, delete it and set the
+# repository back to private — Pages needs a public repo on the current plan.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: preview
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Pages serves a project site from /<repo>/, not from a domain root.
+      # next.config.mjs reads NEXT_PUBLIC_BASE_PATH and prefixes both routes and
+      # /_next/ assets with it. Production leaves it unset and serves from /.
+      - name: Build static export for the Pages subpath
+        run: |
+          set -euo pipefail
+          export NEXT_PUBLIC_BASE_PATH="/${GITHUB_REPOSITORY##*/}"
+          npm run build
+
+      # basePath does not touch plain <img> tags — Next only rewrites routes and
+      # /_next/. photos.ts holds root-absolute paths because that is what the
+      # real origin serves, so patch the artifact instead of the source.
+      #
+      # The .txt files are RSC payloads: they carry the same src/srcSet strings
+      # and are what a client-side navigation renders from. Miss them and images
+      # break the moment someone clicks through to /work and back.
+      - name: Point image paths at the subpath
+        run: |
+          set -euo pipefail
+          export BASE="/${GITHUB_REPOSITORY##*/}"
+          find out -type f \( -name '*.html' -o -name '*.txt' \) -print0 \
+            | xargs -0 perl -pi -e 's{("|, )/images/}{$1$ENV{BASE}/images/}g'
+          if grep -rqE '("|, )/images/' out; then
+            echo "::error::unprefixed /images/ paths left in the export"
+            exit 1
+          fi
+
+      # The preview is a full duplicate of the site on a github.io origin. The
+      # real site must stay crawlable (see CLAUDE.md), so the copy is the thing
+      # that gets de-indexed — belt and braces, since robots.txt stops crawling
+      # but not indexing of a URL someone links to.
+      - name: De-index the preview
+        run: |
+          set -euo pipefail
+          find out -type f -name '*.html' -print0 \
+            | xargs -0 perl -pi -e 's{<head>}{<head><meta name="robots" content="noindex, nofollow">}'
+          printf 'User-agent: *\nDisallow: /\n' > out/robots.txt
+          test "$(grep -rc 'content="noindex, nofollow"' out/index.html)" = 1
+
+      # Jekyll drops directories starting with an underscore, which would take
+      # /_next/ — every script, style and font — with it.
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
